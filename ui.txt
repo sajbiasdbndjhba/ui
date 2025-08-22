@@ -1,15 +1,14 @@
--- RobloxSimpleUI.lua
--- 分类: Window, Tab, Section, 控件(Button, Toggle, Slider, Dropdown, Label)
+-- RobloxSimpleUI.lua (改进版: 默认放在 PlayerGui)
 
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
 
 local UI = {}
 UI.__index = UI
 
--- 主题设置
 UI.Theme = {
     Accent = Color3.fromRGB(29, 161, 242),
     Background = Color3.fromRGB(30, 30, 30),
@@ -18,7 +17,6 @@ UI.Theme = {
     Corner = 8
 }
 
--- === 工具函数 ===
 local function new(class, props)
     local obj = Instance.new(class)
     if props then
@@ -33,12 +31,10 @@ local function makeDraggable(frame, dragHandle)
     dragHandle = dragHandle or frame
     local dragging = false
     local dragInput, dragStart, startPos
-
     local function update(input)
         local delta = input.Position - dragStart
         frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
-
     dragHandle.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
@@ -51,13 +47,11 @@ local function makeDraggable(frame, dragHandle)
             end)
         end
     end)
-
     dragHandle.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement then
             dragInput = input
         end
     end)
-
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             update(input)
@@ -65,24 +59,22 @@ local function makeDraggable(frame, dragHandle)
     end)
 end
 
--- === 窗口 Window ===
 local Window = {}
 Window.__index = Window
 
 function UI:CreateWindow(title)
-    local sg = new("ScreenGui", {Name = "SimpleUI_"..(title:gsub("%s+","_")), ResetOnSpawn = false, Parent = game:GetService("CoreGui")})
+    local parentGui = localPlayer:WaitForChild("PlayerGui")
+    local sg = new("ScreenGui", {Name = "SimpleUI_"..(title:gsub("%s+","_")), ResetOnSpawn = false, Parent = parentGui})
+
     local main = new("Frame", {Name = "Main", AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.new(0, 700, 0, 420), BackgroundColor3 = UI.Theme.Dark, Parent = sg})
     new("UICorner", {CornerRadius = UDim.new(0, UI.Theme.Corner), Parent = main})
 
-    -- Header
     local header = new("Frame", {Parent = main, Size = UDim2.new(1,0,0,40), BackgroundColor3 = UI.Theme.Background})
     local titleLabel = new("TextLabel", {Parent = header, Size = UDim2.new(1,-10,1,0), Position = UDim2.new(0,10,0,0), BackgroundTransparency = 1, Text = title or "SimpleUI", TextColor3 = UI.Theme.Text, Font = Enum.Font.GothamSemibold, TextSize = 18, TextXAlignment = Enum.TextXAlignment.Left})
 
-    -- Left Tab list
     local tabsFrame = new("Frame", {Parent = main, Position = UDim2.new(0,12,0,56), Size = UDim2.new(0,180,1,-68), BackgroundTransparency = 1})
     new("UIListLayout", {Parent = tabsFrame, Padding = UDim.new(0,8), SortOrder = Enum.SortOrder.LayoutOrder})
 
-    -- Right content
     local contentFrame = new("Frame", {Parent = main, Position = UDim2.new(0,210,0,56), Size = UDim2.new(1,-230,1,-68), BackgroundColor3 = UI.Theme.Background})
     new("UICorner", {CornerRadius = UDim.new(0, UI.Theme.Corner), Parent = contentFrame})
     new("UIListLayout", {Parent = contentFrame, Padding = UDim.new(0,10), SortOrder = Enum.SortOrder.LayoutOrder})
@@ -98,7 +90,6 @@ function UI:CreateWindow(title)
         _activeTab = nil
     }, Window)
 
-    -- === 标签 Tab ===
     function win:CreateTab(name)
         local tabBtn = new("TextButton", {Parent = self._tabsFrame, Text = name, Size = UDim2.new(1,0,0,36), BackgroundColor3 = UI.Theme.Dark, TextColor3 = UI.Theme.Text, Font = Enum.Font.GothamBold, TextSize = 14})
         new("UICorner", {CornerRadius = UDim.new(0,6), Parent = tabBtn})
@@ -117,7 +108,6 @@ function UI:CreateWindow(title)
 
         if not self._activeTab then tabBtn:MouseButton1Click() end
 
-        -- === 区块 Section ===
         function tab:CreateSection(title)
             local secFrame = new("Frame", {Parent = tabContent, Size = UDim2.new(1,0,0,20), BackgroundColor3 = UI.Theme.Dark})
             new("UICorner", {CornerRadius = UDim.new(0,6), Parent = secFrame})
@@ -128,7 +118,6 @@ function UI:CreateWindow(title)
 
             local section = {Frame = secFrame, Inner = inner}
 
-            -- === 控件: 按钮 Button ===
             function section:CreateButton(text, cb)
                 local btn = new("TextButton", {Parent = inner, Size = UDim2.new(1,0,0,30), Text = text, BackgroundColor3 = UI.Theme.Accent, TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 14})
                 new("UICorner", {CornerRadius = UDim.new(0,6), Parent = btn})
@@ -136,7 +125,6 @@ function UI:CreateWindow(title)
                 return btn
             end
 
-            -- === 控件: 开关 Toggle ===
             function section:CreateToggle(text, default, cb)
                 default = default or false
                 local container = new("Frame", {Parent = inner, Size = UDim2.new(1,0,0,24), BackgroundTransparency = 1})
@@ -151,28 +139,6 @@ function UI:CreateWindow(title)
                 end)
                 pcall(cb, state)
                 return toggle
-            end
-
-            -- === 控件: 滑条 Slider ===
-            function section:CreateSlider(text, min, max, default, cb)
-                min = min or 0; max = max or 100; default = default or min
-                local container = new("Frame", {Parent = inner, Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1})
-                local label = new("TextLabel", {Parent = container, Size = UDim2.new(1,0,0,18), BackgroundTransparency = 1, Text = text.." — "..tostring(default), TextColor3 = UI.Theme.Text, Font = Enum.Font.Gotham, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left})
-                local barBg = new("Frame", {Parent = container, Position = UDim2.new(0,0,0,20), Size = UDim2.new(1,0,0,8), BackgroundColor3 = UI.Theme.Dark})
-                new("UICorner", {CornerRadius = UDim.new(0,6), Parent = barBg})
-                local barFill = new("Frame", {Parent = barBg, Size = UDim2.new((default-min)/(max-min),0,1,0), BackgroundColor3 = UI.Theme.Accent})
-                new("UICorner", {CornerRadius = UDim.new(0,6), Parent = barFill})
-                pcall(cb, default)
-                return barBg
-            end
-
-            -- === 控件: 下拉 Dropdown ===
-            function section:CreateDropdown(text, options, cb)
-                local container = new("Frame", {Parent = inner, Size = UDim2.new(1,0,0,28), BackgroundTransparency = 1})
-                new("TextLabel", {Parent = container, Size = UDim2.new(1,-100,1,0), BackgroundTransparency = 1, Text = text, TextColor3 = UI.Theme.Text, Font = Enum.Font.Gotham, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left})
-                local btn = new("TextButton", {Parent = container, Size = UDim2.new(0,90,0,24), Position = UDim2.new(1,-90,0,2), Text = "Select", Font = Enum.Font.GothamBold, TextSize = 13, BackgroundColor3 = UI.Theme.Dark, TextColor3 = UI.Theme.Text})
-                new("UICorner", {CornerRadius = UDim.new(0,6), Parent = btn})
-                return btn
             end
 
             return section
